@@ -62,3 +62,4 @@ const atualizar = async (req, res) => {
 
 module.exports = { cadastrar, detalhar, atualizar }
 
+

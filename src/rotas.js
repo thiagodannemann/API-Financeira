@@ -22,3 +22,4 @@ rotas.get('/categoria', categoria.listar);
 rotas.get('/transacao')
 
 module.exports = rotas;
+
