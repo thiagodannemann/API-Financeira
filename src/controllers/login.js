@@ -15,5 +15,4 @@ const login = (req, res) => {
   return res.status(200).json({ usuario, token });
 }
 
-
 module.exports = login;
