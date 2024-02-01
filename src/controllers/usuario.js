@@ -2,14 +2,29 @@ const pool = require('../configs/conexao');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 
-const cadastrar = (req, res) => {
-  const { id, nome, email } = req.body;
+const cadastrar = async (req, res) => {
+  const { nome, email, senha } = req.body;
 
-  const usuarioCriado = {
-    id, nome, email
+  try {
+    const senhaCriptografada = await bcrypt.hash(senha, 10);
+
+    const query = `insert into usuarios (nome, email, senha)
+  values ($1, $2, $3) returning *`;
+
+    const queryParams = [nome, email, senhaCriptografada];
+
+    const { rows: resultado } = await pool.query(query, queryParams);
+
+    const { senha: _, ...usuarioCriado } = resultado[0];
+
+    return res.status(201).json(usuarioCriado);
+
+  } catch (error) {
+    if (error.message == "duplicar valor da chave viola a restrição de unicidade \"usuarios_email_key\"") {
+      return res.status(400).json({ mensagem: 'O e-mail informado já está sendo utilizado por outro usuário.' })
+    }
+    return res.status(500).json({ mensagem: error.message })
   }
-
-  return res.status(201).json(usuarioCriado)
 }
 
 const detalhar = async (req, res) => {
