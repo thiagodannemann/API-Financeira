@@ -5,9 +5,10 @@ const { senhaJWT } = require('../configs/env')
 const listar = async (req, res) => {
   const token = req.token;
   const { id } = jwt.decode(token, senhaJWT);
+  const { filtro } = req.query;
 
   try {
-    const query = `
+    let query = `
     SELECT
       t.id,
       t.tipo,
@@ -22,9 +23,15 @@ const listar = async (req, res) => {
     JOIN
       categorias c ON t.categoria_id = c.id
     WHERE
-      t.usuario_id = $1;`;
+      t.usuario_id = $1`;
 
     const queryParams = [id];
+
+
+    if (filtro && filtro.length > 0) {
+      query += ` AND c.descricao IN (${filtro.map((_, index) => `$${index + 2}`).join(', ')})`;
+      queryParams.push(...filtro);
+    }
 
     const { rows: result } = await pool.query(query, queryParams);
 
@@ -36,9 +43,9 @@ const listar = async (req, res) => {
 }
 
 const listarPeloId = async (req, res) => {
-  const { id: id_transacao } = req.params;
+  const { id: idTransacao } = req.params;
   const token = req.token;
-  const { id: id_usuario } = jwt.decode(token, senhaJWT);
+  const { id: idUsuario } = jwt.decode(token, senhaJWT);
 
   try {
     const query = `
@@ -58,7 +65,7 @@ const listarPeloId = async (req, res) => {
     WHERE
       t.usuario_id = $1 AND t.id = $2;`;
 
-    const queryParams = [id_usuario, id_transacao];
+    const queryParams = [idUsuario, idTransacao];
 
     const { rows: result, rowCount } = await pool.query(query, queryParams);
 
@@ -76,9 +83,9 @@ const inserir = async (req, res) => {
     descricao,
     valor,
     data,
-    categoria_id,
+    idCategoria,
     tipo,
-    id_usuario } = req.body;
+    idUsuario } = req.body;
 
   try {
     const query = `WITH transacao_registrada AS (
@@ -108,29 +115,28 @@ const inserir = async (req, res) => {
       descricao,
       valor,
       data,
-      categoria_id,
+      idCategoria,
       tipo,
-      id_usuario
+      idUsuario
     ];
 
     const { rows: result } = await pool.query(query, queryParams);
 
     return res.status(201).json(result[0]);
   } catch (error) {
-    console.log(error.message)
     return res.status(500).json({ mensagem: 'Erro de servidor' });
   }
 }
 
 const editar = async (req, res) => {
-  const { id: id_transacao } = req.params;
+  const { id: idTransacao } = req.params;
   const {
     descricao,
     valor,
     data,
-    categoria_id,
+    idCategoria,
     tipo,
-    id_usuario } = req.body;
+    idUsuario } = req.body;
 
   try {
     const query = `WITH transacao_atualizada AS (
@@ -165,10 +171,10 @@ const editar = async (req, res) => {
       descricao,
       valor,
       data,
-      categoria_id,
+      idCategoria,
       tipo,
-      id_usuario,
-      id_transacao
+      idUsuario,
+      idTransacao
     ];
 
     const { rows: result, rowCount } = await pool.query(query, queryParams);
@@ -179,8 +185,52 @@ const editar = async (req, res) => {
 
     return res.status(201).json();
   } catch (error) {
-    console.log(error.message)
     return res.status(500).json({ mensagem: 'Erro de servidor' });
   }
 }
-module.exports = { listar, listarPeloId, inserir, editar };
+
+const deletar = async (req, res) => {
+  const { id: idTransacao } = req.params;
+  const token = req.token;
+  const { id: idUsuario } = jwt.decode(token, senhaJWT);
+
+  try {
+    const query = `DELETE FROM transacoes
+    WHERE id = $1 AND usuario_id = $2
+    RETURNING *`;
+    const queryParams = [idTransacao, idUsuario];
+    const { rowCount } = await pool.query(query, queryParams);
+    if (rowCount === 0) {
+      return res.status(404).json({
+        mensagem: 'Não foi encontrado nenhuma transação com esse ID para sua conta.'
+      })
+    }
+    return res.status(204).json();
+  }
+  catch (error) {
+    return res.status(500).json(error.message)
+  }
+}
+
+const extrato = async (req, res) => {
+  const token = req.token;
+  const { id: idUsuario } = jwt.decode(token, senhaJWT)
+
+  try {
+    const query = `SELECT
+    SUM(CASE WHEN tipo = 'entrada' THEN valor ELSE 0 END) AS entrada,
+    SUM(CASE WHEN tipo = 'saida' THEN valor ELSE 0 END) AS saida
+  FROM
+    transacoes
+  WHERE
+    usuario_id = $1`;
+    const queryParams = [idUsuario];
+    const { rows: result } = await pool.query(query, queryParams);
+
+    return res.status(200).json(result)
+  } catch (error) {
+    return res.status(500).json(error.message)
+  }
+}
+
+module.exports = { listar, listarPeloId, inserir, editar, deletar, extrato };
