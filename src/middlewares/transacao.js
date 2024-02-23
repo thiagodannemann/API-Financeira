@@ -2,9 +2,9 @@ const jwt = require('jsonwebtoken');
 const { senhaJWT } = require('../configs/env');
 
 const validarTransacao = (req, res, next) => {
-  const { descricao, valor, data, categoria_id, tipo } = req.body;
+  const { descricao, valor, data, categoria_id: idCategoria, tipo } = req.body;
   const token = req.token;
-  const { id: id_usuario } = jwt.decode(token, senhaJWT);
+  const { id: idUsuario } = jwt.decode(token, senhaJWT);
 
   if (!descricao) {
     return res.status(400).json({ mensagem: 'Por favor insira a descrição' })
@@ -15,7 +15,7 @@ const validarTransacao = (req, res, next) => {
   if (!data) {
     return res.status(400).json({ mensagem: 'Por favor insira a data' })
   }
-  if (!categoria_id) {
+  if (!idCategoria) {
     return res.status(400).json({ mensagem: 'Por favor insira o id da categoria' })
   }
   if (!tipo) {
@@ -26,9 +26,9 @@ const validarTransacao = (req, res, next) => {
     descricao,
     valor,
     data,
-    categoria_id,
+    idCategoria,
     tipo,
-    id_usuario
+    idUsuario
   }
 
   next()

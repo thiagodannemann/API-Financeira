@@ -10,7 +10,6 @@ const validarLogin = require('./middlewares/login');
 const transacao = require('./controllers/transacao');
 const validarTransacao = require('./middlewares/transacao');
 
-
 rotas.post('/usuario', validarCadastro, usuario.cadastrar);
 
 rotas.post('/login', validarLogin, login);
@@ -22,10 +21,11 @@ rotas.put('/usuario', usuario.atualizar);
 rotas.get('/categoria', categoria.listar);
 
 rotas.get('/transacao', transacao.listar);
+rotas.get('/transacao/extrato', transacao.extrato);
 rotas.get('/transacao/:id', transacao.listarPeloId);
 rotas.post('/transacao/', validarTransacao, transacao.inserir);
 rotas.put('/transacao/:id', validarTransacao, transacao.editar);
+rotas.delete('/transacao/:id', transacao.deletar);
 
 
 module.exports = rotas;
-
