@@ -1,41 +1,49 @@
-const pool = require('../configs/conexao')
+const knex = require('../configs/conexao')
 const jwt = require('jsonwebtoken')
 const { senhaJWT } = require('../configs/env')
 
 const listar = async (req, res) => {
   const token = req.token;
-  const { id } = jwt.decode(token, senhaJWT);
+  const { id: usuarioId } = jwt.decode(token, senhaJWT);
   const { filtro } = req.query;
 
   try {
-    let query = `
-    SELECT
-      t.id,
-      t.tipo,
-      t.descricao,
-      t.valor,
-      t.data,
-      t.usuario_id,
-      t.categoria_id,
-      c.descricao AS categoria_nome
-    FROM
-      transacoes t
-    JOIN
-      categorias c ON t.categoria_id = c.id
-    WHERE
-      t.usuario_id = $1`;
-
-    const queryParams = [id];
-
-
     if (filtro && filtro.length > 0) {
-      query += ` AND c.descricao IN (${filtro.map((_, index) => `$${index + 2}`).join(', ')})`;
-      queryParams.push(...filtro);
+      const listarTransacoes = await knex.select(
+        't.id',
+        't.tipo',
+        't.descricao',
+        't.valor',
+        't.data',
+        't.usuario_id',
+        't.categoria_id',
+        'c.descricao AS categoria_nome'
+      )
+        .from('transacoes as t')
+        .join('categorias as c', 't.categoria_id', 'c.id')
+        .where('t.usuario_id', usuarioId)
+        .whereIn('c.descricao', filtro);
+
+      return res.status(200).json(listarTransacoes);
+
+    } else {
+      const listarTransacoes = await knex.select(
+        't.id',
+        't.tipo',
+        't.descricao',
+        't.valor',
+        't.data',
+        't.usuario_id',
+        't.categoria_id',
+        'c.descricao AS categoria_nome'
+      )
+        .from('transacoes as t')
+        .join('categorias as c', 't.categoria_id', 'c.id')
+        .where('t.usuario_id', usuarioId);
+
+      return res.status(200).json(listarTransacoes);
     }
 
-    const { rows: result } = await pool.query(query, queryParams);
-
-    return res.status(200).json(result);
 
   } catch (error) {
     return res.status(500).json(error.message)
@@ -48,31 +56,25 @@ const listarPeloId = async (req, res) => {
   const { id: idUsuario } = jwt.decode(token, senhaJWT);
 
   try {
-    const query = `
-    SELECT
-      t.id,
-      t.tipo,
-      t.descricao,
-      t.valor,
-      t.data,
-      t.usuario_id,
-      t.categoria_id,
-      c.descricao AS categoria_nome
-    FROM
-      transacoes t
-    JOIN
-      categorias c ON t.categoria_id = c.id
-    WHERE
-      t.usuario_id = $1 AND t.id = $2;`;
+    const listarUsuarioPeloId = await knex.select(
+      't.id',
+      't.tipo',
+      't.descricao',
+      't.valor',
+      't.data',
+      't.usuario_id',
+      't.categoria_id',
+      'c.descricao AS categoria_nome'
+    )
+      .from('transacoes as t')
+      .join('categorias as c', 't.categoria_id', 'c.id')
+      .where('t.usuario_id', idUsuario)
+      .andWhere('t.id', idTransacao);
 
-    const queryParams = [idUsuario, idTransacao];
-
-    const { rows: result, rowCount } = await pool.query(query, queryParams);
-
-    if (rowCount === 0) {
+    if (listarUsuarioPeloId.length === 0) {
       return res.status(404).json({ mensagem: 'Transação não encontrada.' })
     }
-    return res.status(200).json(result[0]);
+    return res.status(200).json(listarUsuarioPeloId);
   } catch (error) {
     return res.status(500).json(error.message)
   }
@@ -88,41 +90,27 @@ const inserir = async (req, res) => {
     idUsuario } = req.body;
 
   try {
-    const query = `WITH transacao_registrada AS (
-      INSERT INTO transacoes (
-        descricao, valor, data, categoria_id, tipo, usuario_id
-        )
-      VALUES (
-        $1, $2, $3, $4, $5, $6
-        )
-      RETURNING *
-    )
-    SELECT
-      tr.id,
-      tr.descricao,
-      tr.valor,
-      tr.data,
-      tr.categoria_id,
-      tr.tipo,
-      tr.usuario_id,
-      c.descricao AS categoria_nome
-    FROM
-      transacao_registrada tr
-    JOIN
-      categorias c ON tr.categoria_id = c.id`;
+    const [registrarTransacao] = await knex('transacoes')
+      .insert({
+        descricao,
+        valor,
+        data,
+        tipo,
+        categoria_id: idCategoria,
+        usuario_id: idUsuario
+      })
+      .returning('*');
 
-    const queryParams = [
-      descricao,
-      valor,
-      data,
-      idCategoria,
-      tipo,
-      idUsuario
-    ];
+    const [categoria] = await knex('categorias')
+      .select('descricao as categoria_nome')
+      .where('id', idCategoria);
 
-    const { rows: result } = await pool.query(query, queryParams);
+    const transacaoInserida = {
+      ...registrarTransacao, ...categoria
+    }
 
-    return res.status(201).json(result[0]);
+    return res.status(201).json(transacaoInserida);
+
   } catch (error) {
     return res.status(500).json({ mensagem: 'Erro de servidor' });
   }
@@ -139,47 +127,27 @@ const editar = async (req, res) => {
     idUsuario } = req.body;
 
   try {
-    const query = `WITH transacao_atualizada AS (
-      UPDATE transacoes
-      SET
-        descricao = $1,
-        valor = $2,
-        data = $3,
-        categoria_id = $4,
-        tipo = $5,
-        usuario_id = $6
-      WHERE
-        id = $7  -- Substitua pelo ID da transação que você deseja editar
-      RETURNING 
-        id, descricao, valor, data, categoria_id, tipo, usuario_id
-      )
-      SELECT
-      ta.id,
-      ta.descricao,
-      ta.valor,
-      ta.data,
-      ta.categoria_id,
-      ta.tipo,
-      ta.usuario_id,
-      c.descricao AS categoria_nome
-    FROM
-      transacao_atualizada ta
-    JOIN
-      categorias c ON ta.categoria_id = c.id;`;
+    const transacaoEditada = await knex('transacoes')
+      .update({
+        descricao,
+        valor,
+        data,
+        tipo,
+        categoria_id: idCategoria,
+        usuario_id: idUsuario
+      })
+      .where({ id: idTransacao })
+      .returning(
+        'id',
+        'descricao',
+        'valor',
+        'data',
+        'categoria_id',
+        'tipo',
+        'usuario_id'
+      );
 
-    const queryParams = [
-      descricao,
-      valor,
-      data,
-      idCategoria,
-      tipo,
-      idUsuario,
-      idTransacao
-    ];
-
-    const { rows: result, rowCount } = await pool.query(query, queryParams);
-
-    if (rowCount === 0) {
+    if (transacaoEditada.length === 0) {
       return res.status(404).json({ mensagem: 'Não existe transação com esse ID para o usuário logado.' })
     }
 
@@ -195,12 +163,12 @@ const deletar = async (req, res) => {
   const { id: idUsuario } = jwt.decode(token, senhaJWT);
 
   try {
-    const query = `DELETE FROM transacoes
-    WHERE id = $1 AND usuario_id = $2
-    RETURNING *`;
-    const queryParams = [idTransacao, idUsuario];
-    const { rowCount } = await pool.query(query, queryParams);
-    if (rowCount === 0) {
+    const deletarTransacao = await knex('transacoes')
+      .where({ id: idTransacao, usuario_id: idUsuario })
+      .del()
+      .returning('*');
+
+    if (deletarTransacao.length === 0) {
       return res.status(404).json({
         mensagem: 'Não foi encontrado nenhuma transação com esse ID para sua conta.'
       })
@@ -217,19 +185,16 @@ const extrato = async (req, res) => {
   const { id: idUsuario } = jwt.decode(token, senhaJWT)
 
   try {
-    const query = `SELECT
-    SUM(CASE WHEN tipo = 'entrada' THEN valor ELSE 0 END) AS entrada,
-    SUM(CASE WHEN tipo = 'saida' THEN valor ELSE 0 END) AS saida
-  FROM
-    transacoes
-  WHERE
-    usuario_id = $1`;
-    const queryParams = [idUsuario];
-    const { rows: result } = await pool.query(query, queryParams);
+    const exibirExtrato = await knex('transacoes')
+      .select(
+        knex.raw('SUM(CASE WHEN tipo = ? THEN valor ELSE 0 END) AS entrada', ['entrada']),
+        knex.raw('SUM(CASE WHEN tipo = ? THEN valor ELSE 0 END) AS saida', ['saida'])
+      )
+      .where({ usuario_id: idUsuario });
 
-    return res.status(200).json(result)
+    return res.status(200).json(exibirExtrato)
   } catch (error) {
-    return res.status(500).json(error.message)
+    return res.status(500).json({ mensagem: 'Erro de servidor' })
   }
 }
 
