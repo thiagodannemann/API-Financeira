@@ -1,4 +1,4 @@
-const pool = require('../configs/conexao');
+const knex = require('../configs/conexao');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { senhaJWT } = require('../configs/env');
@@ -8,26 +8,26 @@ const login = async (req, res) => {
   const { email, senha } = req.body;
 
   try {
-    const query = `select * from usuarios where email = $1`;
-    const queryParams = [email];
-    const { rows: resultado, rowCount } = await pool.query(query, queryParams);
+    const selecionarUsuario = await knex('usuarios').where({ email }).debug();
 
-    if (rowCount === 0) {
+    console.log(selecionarUsuario)
+
+    if (selecionarUsuario.length === 0) {
       return res.status(404).json({ mensagem: "Usuário e/ou senha inválido(s)." })
     }
 
-    const senhaSalva = resultado[0].senha;
+    const senhaSalva = selecionarUsuario[0].senha;
     const validarSenha = await bcrypt.compare(senha, senhaSalva);
 
     if (!validarSenha) {
       return res.status(404).json({ mensagem: "Usuário e/ou senha inválido(s)." })
     }
-    const token = jwt.sign({ id: resultado[0].id }, senhaJWT);
+    const token = jwt.sign({ id: selecionarUsuario[0].id }, senhaJWT);
 
     const usuario = {
-      id: resultado[0].id,
-      nome: resultado[0].nome,
-      email: resultado[0].email
+      id: selecionarUsuario[0].id,
+      nome: selecionarUsuario[0].nome,
+      email: selecionarUsuario[0].email
     }
     return res.status(200).json({ usuario, token });
   }
